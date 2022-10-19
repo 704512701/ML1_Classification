@@ -1,0 +1,653 @@
+---
+title: "Drug"
+author: "Zhe Zhao(433707)"
+date: "2022/5/26"
+output:
+  word_document: default
+  html_document: default
+---
+```{r}
+library(class)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(caret)
+library(verification)
+library(corrplot)
+library(gmodels)
+library(kernlab)
+library(tidyverse)
+```
+
+## Introduction
+The main target of this project is using classification method of machine learning, to build a model explaining whether a particular person consumed cocaine in the last month based on the training sample and generate predictions for all observations from the test sample.
+
+## Import data
+Import data and check detailed information.
+```{r}
+## Read data
+drug <- read.csv("C:/Users/zhaoz/Desktop/jiqixuexi/pro/drugs_train.csv")
+
+## get a quick peek at the data
+head(drug)
+
+## get dataset detailed infomation
+str(drug)
+
+```
+
+
+## Data Visualization
+Plot a boxplot of variable personality_neuroticism
+```{r}
+boxplot(drug$personality_neuroticism)
+```
+
+Plot a boxplot of variable personality_extraversion
+```{r}
+boxplot(drug$personality_extraversion)
+```
+
+Plot a boxplot of variable personality_openness
+```{r}
+boxplot(drug$personality_openness)
+```
+
+Plot a boxplot of variable personality_agreeableness
+```{r}
+boxplot(drug$personality_agreeableness)
+```
+
+Plot a boxplot of variable personality_conscientiousness
+```{r}
+boxplot(drug$personality_conscientiousness)
+```
+
+Plot a boxplot of variable personality_impulsiveness
+```{r}
+boxplot(drug$personality_impulsiveness)
+```
+
+Plot a boxplot of variable personality_sensation
+```{r}
+boxplot(drug$personality_sensation)
+```
+
+
+
+Divide the data into training and testing sample.
+```{r}
+set.seed(123456)
+# divide the data into training and testing sample
+drug_which_training <- createDataPartition(drug$consumption_cocaine_last_month,
+                                            p = 0.7, 
+                                            list = FALSE) 
+
+drug_train <-drug[c(drug_which_training),]
+drug_test <- drug[-c(drug_which_training),]
+## save data
+save(list = c("drug_train",
+              "drug_test"),
+     file = "C:/Users/zhaoz/Desktop/jiqixuexi/pro/drug_train_test.RData")
+```
+Check if there are any NA values.
+```{r}
+any(is.na(drug_train))
+```
+
+## Data pre-processing
+```{r}
+# convert all character variables to factors (apart from the 1st column - id)
+
+# create a vector of names
+drug_categorical_vars <- 
+  sapply(drug_train[, -1], is.character) %>% 
+  which() %>% 
+  names()
+
+drug_categorical_vars
+```
+
+Apply a conversion in a loop and check all factor variables
+```{r}
+# apply a conversion in a loop
+for (variable in drug_categorical_vars) {
+  drug_train[[variable]] <- as.factor(drug_train[[variable]])
+}
+## check all factor variables
+glimpse(drug_train)
+
+```
+
+Verify transformation in data frame details, lets see if there are wrong type data in the training sample.
+```{r}
+# verify transformation in data frame details
+str(drug_train)
+```
+
+White a function to generate contingency table.
+```{r}
+# function: generate contingency table
+get.contingency.table <- function(dep.var, indep.var, stat.tests=F){
+  if(stat.tests == F){
+    CrossTable(dep.var, indep.var, digits=1,
+               prop.r=F, prop.t=F, prop.chisq=F)
+  }else{
+    CrossTable(dep.var, indep.var, digits=1,
+               prop.r=F, prop.t=F, prop.chisq=F,
+               chisq=T, fisher=T)
+  }
+}
+```
+
+## Significant test
+For numeric variables, I prefer to use t-test and for others, I use chi-square test and fisher test.
+
+Draw a plot of variable age.
+```{r}
+plot(drug_train$age)
+```
+Check levels and label them for analysis.
+```{r}
+levels(drug_train$age)
+drug_train$age<-factor(drug_train$age,
+                                           level=c("18-24",
+                                                   "25-34",
+                                                   "35-44",
+                                                   "45-54",
+                                                   "55-64",
+                                                   "65+"),
+                                            labels = c(1:6))
+```
+
+Make contingency table and do Chi-square test and fisher test of variable age.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$age)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$age, workspace = 2e7)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$age)
+```
+
+Draw a plot of variable education.
+```{r}
+plot(drug_train$education)
+```
+Check levels and label them for analysis.
+```{r}
+levels(drug_train$education)
+drug_train$education<-factor(drug_train$education,
+                                           level=c("Left school before 16 years", 
+                                                   "Left school at 16 years",
+                                                   "Left school at 17 years",                         
+                                                   "Left school at 18 years",    
+                                                   "Some college or university, no certificate or degree",
+                                                   "Professional certificate/ diploma",  
+                                                   "University degree",
+                                                   "Masters degree",                                      
+                                                   "Doctorate degree"),
+                                            labels = c(1:9))
+
+```
+Make contingency table and do Chi-square test and fisher test of variable education.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$education)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$education, workspace = 2e7)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$education)
+
+```
+
+Draw a plot of variable country.
+```{r}
+plot(drug_train$country)
+```
+Check levels and label them for analysis.
+```{r}
+drug_train$country<-factor(drug_train$country,
+                                           level=c("Australia",
+                                                   "Canada", 
+                                                   "Ireland",
+                                                   "New Zealand",
+                                                   "Other",
+                                                   "UK",
+                                                   "USA"),
+                                                labels = c(1:7))
+```
+Make contingency table and do Chi-square test and fisher test of variable country.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$country)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$country)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$country)
+
+```
+
+Draw a plot of variable consumption_alcohol.
+```{r}
+plot(drug_train$consumption_alcohol)
+```
+Label them for analysis.
+```{r}
+
+drug_train$consumption_alcohol<-factor(drug_train$consumption_alcohol,
+                                           level=c("never used",
+                                                   "used in last day", 
+                                                   "used in last week",
+                                                   "used in last month",
+                                                   "used in last year",
+                                                   "used in last decade",
+                                                   "used over a decade ago"),
+                                                labels = c(1:7))
+```
+Make contingency table and do Chi-square test and fisher test of variable consumption_alcohol.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$consumption_alcohol)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_alcohol, workspace = 2e7)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_alcohol)
+```
+
+Draw a plot of variable ethnicity.
+```{r}
+plot(drug_train$ethnicity)
+```
+Label them for analysis.
+```{r}
+
+drug_train$ethnicity <- factor(drug_train$ethnicity,
+                                           level=c("Asian",
+                                                   "Black",
+                                                   "Mixed-Black/Asian",
+                                                   "Mixed-White/Asian",
+                                                   "Mixed-White/Black",
+                                                   "Other",
+                                                   "White"),
+                                                labels = c(1:7))
+```
+Make contingency table and do Chi-square test and fisher test of variable ethnicity.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$ethnicity)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$ethnicity, workspace = 2e7)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$ethnicity)
+```
+
+Draw a plot of variable consumption_amphetamines.
+```{r}
+plot(drug_train$consumption_amphetamines)
+```
+Label them for analysis.
+```{r}
+drug_train$consumption_amphetamines <- factor(drug_train$consumption_amphetamines,
+                                           level=c("never used",
+                                                   "used in last day", 
+                                                   "used in last week",
+                                                   "used in last month",
+                                                   "used in last year",
+                                                   "used in last decade",
+                                                   "used over a decade ago"),
+                                                labels = c(1:7))
+
+```
+Make contingency table and do Chi-square test and fisher test of variable consumption_amphetamines.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$consumption_amphetamines)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_amphetamines, workspace = 2e8)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_amphetamines)
+```
+
+Draw a plot of variable consumption_caffeine.
+```{r}
+plot(drug_train$consumption_caffeine)
+```
+Label them for analysis.
+```{r}
+drug_train$consumption_caffeine <- factor(drug_train$consumption_caffeine,
+                                           level=c("never used",
+                                                   "used in last day", 
+                                                   "used in last week",
+                                                   "used in last month",
+                                                   "used in last year",
+                                                   "used in last decade",
+                                                   "used over a decade ago"),
+                                                labels = c(1:7))
+```
+Make contingency table and do Chi-square test and fisher test of variable consumption_caffeine.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$consumption_caffeine)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_caffeine, workspace = 2e8)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_caffeine)
+	
+```
+
+Draw a plot of variable consumption_chocolate.
+```{r}
+plot(drug_train$consumption_chocolate)
+```
+Label them for analysis.
+```{r}
+drug_train$consumption_chocolate <- factor(drug_train$consumption_chocolate,
+                                           level=c("never used",
+                                                   "used in last day", 
+                                                   "used in last week",
+                                                   "used in last month",
+                                                   "used in last year",
+                                                   "used in last decade",
+                                                   "used over a decade ago"),
+                                                labels = c(1:7))
+```
+Make contingency table and do Chi-square test and fisher test of variable consumption_chocolate.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$consumption_chocolate)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_chocolate, workspace = 2e8)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_chocolate)
+	
+```
+
+Draw a plot of variable consumption_mushrooms.
+```{r}
+plot(drug_train$consumption_mushrooms)
+```
+Label them for analysis.
+```{r}
+
+drug_train$consumption_mushrooms <- factor(drug_train$consumption_mushrooms,
+                                           level=c("never used",
+                                                   "used in last day", 
+                                                   "used in last week",
+                                                   "used in last month",
+                                                   "used in last year",
+                                                   "used in last decade",
+                                                   "used over a decade ago"),
+                                                labels = c(1:7))
+
+	
+```
+Make contingency table and do Chi-square test and fisher test of variable consumption_mushrooms.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$consumption_mushrooms)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_mushrooms, workspace = 2e8)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_mushrooms)
+	
+```
+
+Draw a plot of variable consumption_nicotine.
+```{r}
+plot(drug_train$consumption_nicotine)
+```
+Label them for analysis.
+```{r}
+
+drug_train$consumption_nicotine <- factor(drug_train$consumption_nicotine,
+                                           level=c("never used",
+                                                   "used in last day", 
+                                                   "used in last week",
+                                                   "used in last month",
+                                                   "used in last year",
+                                                   "used in last decade",
+                                                   "used over a decade ago"),
+                                                labels = c(1:7))
+
+
+```
+Make contingency table and do Chi-square test and fisher test of variable consumption_nicotine.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$consumption_nicotine)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_nicotine, workspace = 2e8)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_nicotine)
+	
+```
+
+Draw a plot of variable consumption_cannabis
+```{r}
+plot(drug_train$consumption_cannabis)
+```
+Label them for analysis.
+```{r}
+
+drug_train$consumption_cannabis <- factor(drug_train$consumption_cannabis,
+                                           level=c("never used",
+                                                   "used in last day", 
+                                                   "used in last week",
+                                                   "used in last month",
+                                                   "used in last year",
+                                                   "used in last decade",
+                                                   "used over a decade ago"),
+                                                labels = c(1:7))
+
+```
+Make contingency table and do Chi-square test and fisher test of variable consumption_cannabis.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$consumption_cannabis)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_cannabis, workspace = 2e8)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$consumption_cannabis)
+```
+
+Draw a plot of variable gender.
+```{r}
+plot(drug_train$gender)
+```
+Label them for analysis.
+```{r}
+drug_train$gender <- factor(drug_train$gender,
+                                           level=c("female",
+                                                   "male"),
+                                                labels = c(1:2))
+```
+Make contingency table and do Chi-square test and fisher test of variable gender.
+```{r}
+get.contingency.table(drug_train$consumption_cocaine_last_month, drug_train$gender)
+fisher.test(drug_train$consumption_cocaine_last_month, drug_train$gender, workspace = 2e8)
+chisq.test(drug_train$consumption_cocaine_last_month, drug_train$gender)
+```
+
+
+Draw a plot of variable consumption_cocaine_last_month
+```{r}
+plot(drug_train$consumption_cocaine_last_month)
+```
+Label them for analysis.
+```{r}
+drug_train$consumption_cocaine_last_month <- factor(drug_train$consumption_cocaine_last_month,
+                                           level=c("Yes",
+                                                   "No"),
+                                                labels = c(0:1))
+```
+
+For numeric variables, i used t-test to check the significance.
+
+Do t-test of variable personality_neuroticism.
+```{r}
+t.test(drug_train$personality_neuroticism ~ drug_train$consumption_cocaine_last_month)
+```
+Do t-test of variable personality_extraversion.
+```{r}
+t.test(drug_train$personality_extraversion  ~ drug_train$consumption_cocaine_last_month)
+```
+Do t-test of variable personality_openness.
+```{r}
+t.test(drug_train$personality_openness ~ drug_train$consumption_cocaine_last_month)
+```
+Do t-test of variable personality_agreeableness.
+```{r}
+t.test(drug_train$personality_agreeableness ~ drug_train$consumption_cocaine_last_month)
+```
+Do t-test of variable personality_conscientiousness.
+```{r}
+t.test(drug_train$personality_conscientiousness ~ drug_train$consumption_cocaine_last_month)
+```
+Do t-test of variable personality_impulsiveness.
+```{r}
+t.test(drug_train$personality_impulsiveness ~ drug_train$consumption_cocaine_last_month)
+```
+Do t-test of variable personality_sensation.
+```{r}
+t.test(drug_train$personality_sensation ~ drug_train$consumption_cocaine_last_month)
+```
+
+After these test, we chose below variables: "age", "gender", "country", "ethnicity", "consumption_alcohol","consumption_amphetamines","consumption_cannabis","consumption_mushrooms","consumption_nicotine", "consumption_cocaine_last_month","personality_neuroticism", "personality_agreeableness","personality_conscientiousness", "personality_impulsiveness", "personality_sensation"
+
+Creat a new dataframe with selected variables.
+```{r}
+load("C:/Users/zhaoz/Desktop/jiqixuexi/pro/drug_train_test.RData")
+drug_train_pro <- drug_train[,c("age", "gender", "country", "ethnicity", "consumption_alcohol", 
+                              "consumption_amphetamines","consumption_cannabis",
+                              "consumption_mushrooms","consumption_nicotine", "consumption_cocaine_last_month",
+                              "personality_neuroticism", "personality_agreeableness", 
+                              "personality_conscientiousness", "personality_impulsiveness", "personality_sensation")]
+```
+
+And for testing sample.
+```{r}
+drug_test <- drug_test[,c("age", "gender", "country", "ethnicity", "consumption_alcohol", 
+                              "consumption_amphetamines","consumption_cannabis",
+                              "consumption_mushrooms","consumption_nicotine", "consumption_cocaine_last_month",
+                              "personality_neuroticism", "personality_agreeableness", 
+                              "personality_conscientiousness", "personality_impulsiveness", "personality_sensation")]
+```
+
+
+## KNN model
+
+Firstly, we use drug_train_pro this new dataset to check the performance of the model.
+
+Define the training control, I use 5-fold cross validation.
+```{r}
+## set “k”s
+different_k <- data.frame(k = seq(1, 99, 4))
+## use 5-fold cross validation
+ctrl_cv5 <- trainControl(method = "cv",
+                         number = 5)
+```
+
+## Model 1
+
+```{r}
+## run the training
+set.seed(2222)
+
+drug_train_pro_knn_tuned <- 
+  train(consumption_cocaine_last_month ~ ., 
+        data = drug_train_pro,
+        method = "knn",
+        # validation used!
+        trControl = ctrl_cv5,
+        # parameters to be compared
+        tuneGrid = different_k)
+
+## now validation is applied to EVERY SINGLE value of k.
+
+## lets check the results
+
+drug_train_pro_knn_tuned
+plot(drug_train_pro_knn_tuned)
+```
+
+We can see that from the perspective of AUC the best value of k = 97. 
+Value of Accuracy is good, the best accuracy obtained >> k = 97 and the accuracy seems to increase with k.
+
+## Model 2 
+In the case of cross-validation, should apply transformations of input data in the train() function, I use preProcess = "range".
+```{r}
+set.seed(222)
+
+drug_train_pro_knn_tuned_scaled <- 
+  train(consumption_cocaine_last_month ~ ., 
+        data = drug_train_pro,
+        method = "knn",
+        # validation used!
+        trControl = ctrl_cv5,
+        # parameters to be compared
+        tuneGrid = different_k,
+        # data transformation
+        preProcess = c("range"))
+
+
+drug_train_pro_knn_tuned_scaled
+plot(drug_train_pro_knn_tuned_scaled)
+```
+We can see that from the perspective of AUC the best value of k = 9.
+Value of Accuracy is very similar to above.
+
+
+Check which value of k gives the highest AUC.
+```{r}
+ctrl_cv5a <- trainControl(method = "cv",
+                          number = 5,
+                          # probabilities of each level predicted in cross-validation
+                          classProbs = TRUE,
+                          # summary function that includes ROC
+                          summaryFunction = twoClassSummary)
+
+```
+
+## Model 3
+In the case of cross-validation, should apply transformations of input data in the train() function, I use preProcess = "range". And I also use validation with probabilities and twoClassSummary
+```{r}
+set.seed(2222)
+drug_train_pro_knn_tuned_scaled2 <- 
+  train(consumption_cocaine_last_month ~ ., 
+        data = drug_train_pro,
+        # knn
+        method = "knn",
+        # validation used - with probabilities and twoClassSummary
+        trControl = ctrl_cv5a,
+        # parameters to be compared
+        tuneGrid = different_k,
+        preProcess = c("range"),
+        metric = "ROC")
+
+drug_train_pro_knn_tuned_scaled2
+plot(drug_train_pro_knn_tuned_scaled2)
+
+```
+
+
+
+Now run the model for testing sample and check.
+Testing sample is names “drug_test”, separated from “drug_train”.
+```{r}
+drug_test$predicted <- drug_train_pro_knn_tuned_scaled2 %>% predict(drug_test)
+```
+
+Lets built a confusion matrix table.
+```{r}
+# confusion matrix table 
+confusion_table = table(drug_test[,'predicted'], drug_test[,'consumption_cocaine_last_month'])
+confusion_table
+```
+
+Definite of TP,TN,FP,FN.
+```{r} 
+## Definition of TP,TN,FP,FN
+confusion_table[1,1] = 'TN'
+confusion_table[1,2] = 'FN'
+confusion_table[2,1] = 'FP'
+confusion_table[2,2] = 'TP'
+## output
+confusion_table
+```
+
+Write a function to calculate accuracy.
+```{r}
+## function
+et_accuracy <- function(df, predicted, actual){
+  confusion_table = table(drug_test[,'predicted'], drug_test[,'consumption_cocaine_last_month'])
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  accuracy = round((TP + TN) / sum(TP,FP,TN,FN), 2)
+  return(accuracy)
+}
+```
+
+Use this function to check the accuracy of testing sample!
+```{r}
+## accuracy value 
+score = data.frame(accuracy=et_accuracy(drug_test,'predicted','consumption_cocaine_last_month'))
+
+## output
+score
+                   
+```
+Seems good!
+
+## Conclusion
+I also used SVM and decision tree, the best method is KNN, because the Accuracy value is highest.
+

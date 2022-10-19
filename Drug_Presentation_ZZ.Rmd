@@ -1,0 +1,179 @@
+---
+title: "Drug"
+author: "Zhe Zhao(433707)"
+date: "2022/5/26"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r}
+library(class)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(caret)
+library(verification)
+library(corrplot)
+library(gmodels)
+library(kernlab)
+library(tidyverse)
+```
+
+## Introduction
+The main target of this project is using classification method of machine learning, to build a model explaining whether a particular person consumed cocaine in the last month based on the training sample and generate predictions for all observations from the test sample.
+
+## Import data
+Import data and check detailed information.
+```{r}
+## Read data
+drug <- read.csv("C:/Users/zhaoz/Desktop/jiqixuexi/pro/drugs_train.csv")
+
+## get a quick peek at the data
+head(drug)
+
+## get dataset detailed infomation
+str(drug)
+
+```
+## Divide data
+Divide the data into training sample as 70% and testing sample as 30%.
+```{r}
+set.seed(123456)
+# divide the data into training and testing sample
+drug_which_training <- createDataPartition(drug$consumption_cocaine_last_month,
+                                            p = 0.7, 
+                                            list = FALSE) 
+
+drug_train <-drug[c(drug_which_training),]
+drug_test <- drug[-c(drug_which_training),]
+## save data
+save(list = c("drug_train",
+              "drug_test"),
+     file = "C:/Users/zhaoz/Desktop/jiqixuexi/pro/drug_train_test.RData")
+```
+
+I chose below variables: "age", "gender", "country", "ethnicity", "consumption_alcohol","consumption_amphetamines","consumption_cannabis","consumption_mushrooms","consumption_nicotine", "consumption_cocaine_last_month","personality_neuroticism", "personality_agreeableness","personality_conscientiousness", "personality_impulsiveness", "personality_sensation"
+
+## Creat new dataset
+Creat a new dataframe with selected variables.
+```{r}
+load("C:/Users/zhaoz/Desktop/jiqixuexi/pro/drug_train_test.RData")
+drug_train_pro <- drug_train[,c("age", "gender", "country", "ethnicity", "consumption_alcohol", 
+                              "consumption_amphetamines","consumption_cannabis",
+                              "consumption_mushrooms","consumption_nicotine", "consumption_cocaine_last_month",
+                              "personality_neuroticism", "personality_agreeableness", 
+                              "personality_conscientiousness", "personality_impulsiveness", "personality_sensation")]
+```
+
+And for testing sample.
+```{r}
+drug_test <- drug_test[,c("age", "gender", "country", "ethnicity", "consumption_alcohol", 
+                              "consumption_amphetamines","consumption_cannabis",
+                              "consumption_mushrooms","consumption_nicotine", "consumption_cocaine_last_month",
+                              "personality_neuroticism", "personality_agreeableness", 
+                              "personality_conscientiousness", "personality_impulsiveness", "personality_sensation")]
+```
+
+## KNN Model
+Why use KNN?
+The highest accuracy!
+But I have to spend more time in selecting k to get the highest accuracy, however, it is worth.
+
+Why not Decision Tree?
+Need more time than KNN, but lower(just a little bit) accuracy!
+Why not SVM?
+Really long time taken, although there are only 1.5 thousand pieces of data.
+
+
+Set "k"s
+```{r}
+## set “k”s
+different_k <- data.frame(k = seq(1, 99, 4))
+```
+
+Check which value of k gives the highest AUC.
+```{r}
+ctrl_cv5a <- trainControl(method = "cv",
+                          number = 5,
+                          # probabilities of each level predicted in cross-validation
+                          classProbs = TRUE,
+                          # summary function that includes ROC
+                          summaryFunction = twoClassSummary)
+
+```
+
+
+In the case of cross-validation, should apply transformations of input data in the train() function, I use preProcess = "range". And I also use validation with probabilities and twoClassSummary.
+```{r}
+set.seed(2222)
+drug_train_pro_knn_tuned_scaled2 <- 
+  train(consumption_cocaine_last_month ~ ., 
+        data = drug_train_pro,
+        # knn
+        method = "knn",
+        # validation used - with probabilities and twoClassSummary
+        trControl = ctrl_cv5a,
+        # parameters to be compared
+        tuneGrid = different_k,
+        preProcess = c("range"),
+        metric = "ROC")
+
+drug_train_pro_knn_tuned_scaled2
+plot(drug_train_pro_knn_tuned_scaled2)
+```
+Optimal k is 69.
+
+
+Now run the model for testing sample and check.
+Testing sample is names “drug_test”, separated from “drug_train”.
+```{r}
+drug_test$predicted <- drug_train_pro_knn_tuned_scaled2 %>% predict(drug_test)
+```
+
+Lets built a confusion matrix table.
+```{r}
+# confusion matrix table 
+confusion_table = table(drug_test[,'predicted'], drug_test[,'consumption_cocaine_last_month'])
+confusion_table
+```
+
+Definite of TP,TN,FP,FN.
+```{r} 
+## Definition of TP,TN,FP,FN
+confusion_table[1,1] = 'TN'
+confusion_table[1,2] = 'FN'
+confusion_table[2,1] = 'FP'
+confusion_table[2,2] = 'TP'
+## output
+confusion_table
+```
+
+Write a function to calculate accuracy.
+```{r}
+## function
+et_accuracy <- function(df, predicted, actual){
+  confusion_table = table(drug_test[,'predicted'], drug_test[,'consumption_cocaine_last_month'])
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  accuracy = round((TP + TN) / sum(TP,FP,TN,FN), 2)
+  return(accuracy)
+}
+```
+
+Use this function to check the accuracy of testing sample!
+```{r}
+## accuracy value 
+score = data.frame(accuracy = et_accuracy(drug_test,'predicted','consumption_cocaine_last_month'))
+
+## output
+score
+                   
+```
+Seems good!
+
+## Conclusion
+I also used SVM and decision tree, the best method is KNN, because the Accuracy value is highest.
+
